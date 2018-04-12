@@ -10,6 +10,7 @@ type Date struct {
 
 // TODO: Add scoringplays
 type Game struct {
+	GamePK int
 	Status GameStatus `json:"status"`
 	Teams  GameTeams
 }
@@ -34,5 +35,6 @@ type HomeTeam struct {
 }
 
 type TeamInfo struct {
-	Name string
+	Name         string
+	Abbreviation string
 }
