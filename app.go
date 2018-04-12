@@ -23,28 +23,33 @@ var gameScore = map[int][]int{}
 // {gameID: state}
 var gameState = map[int]string{}
 
+var flags = map[string]bool{
+	"goal":  true,
+	"state": true,
+}
+
 func main() {
 
-	var flags = map[string]bool{}
+	if len(os.Args) > 1 {
+		parser := argparse.NewParser(name, desc)
 
-	parser := argparse.NewParser(name, desc)
+		goals := parser.Flag("g", "goal", &argparse.Options{Help: "Get alerted when a goal has been scored."})
+		state := parser.Flag("s", "state", &argparse.Options{Help: "Get alerted when a game starts or ends."})
 
-	goals := parser.Flag("g", "goal", &argparse.Options{Help: "Get alerted when a goal has been scored."})
-	state := parser.Flag("s", "state", &argparse.Options{Help: "Get alerted when a game starts or ends."})
+		err := parser.Parse(os.Args)
 
-	flags["goal"] = *goals
-	flags["state"] = *state
+		if err != nil {
+			// handle error
+			fmt.Println(err)
+		}
 
-	err := parser.Parse(os.Args)
-
-	if err != nil {
-		// handle error
-		fmt.Println(err)
+		flags["goal"] = *goals
+		flags["state"] = *state
 	}
 
 	initGame()
 
-	update(flags)
+	update()
 
 }
 
@@ -59,9 +64,9 @@ func initGame() {
 	}
 }
 
-func update(flags map[string]bool) {
+func update() {
 	for {
-		msg, change := getUpdateMessage(flags)
+		msg, change := getUpdateMessage()
 
 		if change {
 			fmt.Println("==== UPDATE ====\n", msg)
@@ -71,7 +76,7 @@ func update(flags map[string]bool) {
 	}
 }
 
-func getUpdateMessage(flags map[string]bool) (string, bool) {
+func getUpdateMessage() (string, bool) {
 	var updateMessage bytes.Buffer
 
 	response := helpers.Get()
