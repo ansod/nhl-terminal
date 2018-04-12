@@ -1,8 +1,10 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/akamensky/argparse"
 	"github.com/ansod/nhl-terminal/helpers"
@@ -42,25 +44,58 @@ func main() {
 		fmt.Println(err)
 	}
 
+	initGame()
+
 	update(flags)
 
 }
 
-func update(flags map[string]bool) {
+func initGame() {
 	response := helpers.Get()
 
-	fmt.Println(response.Dates[0].Games[0].Status.AbstractGameState)
+	for _, game := range response.Dates[0].Games {
+		gameScore[game.GamePK] = []int{game.Teams.Home.Score, game.Teams.Away.Score}
+		gameState[game.GamePK] = game.Status.AbstractGameState
+	}
+}
+
+func update(flags map[string]bool) {
+	var updateMessage bytes.Buffer
+
+	for {
+		fmt.Println("reading...")
+		response := helpers.Get()
+
+		for _, game := range response.Dates[0].Games {
+			s, change := compareScore(game)
+			if change {
+				updateMessage.WriteString(s)
+			}
+			s, change = compareState(game)
+			if change {
+				updateMessage.WriteString(s)
+			}
+		}
+
+		fmt.Println(updateMessage.String())
+
+		updateMessage.Reset()
+
+		time.Sleep(1 * time.Minute)
+	}
 }
 
 func compareScore(game helpers.Game) (string, bool) {
 	hScore := game.Teams.Home.Score
 	aScore := game.Teams.Away.Score
 
-	if hScore == gameScore[game.GamePK][0] && aScore > gameScore[game.GamePK][1] {
+	if hScore == gameScore[game.GamePK][0] && aScore == gameScore[game.GamePK][1] {
 		return "", false
 	}
 
-	return fmt.Sprintf("Game score: %s %d : %s %d",
+	gameScore[game.GamePK] = []int{hScore, aScore}
+
+	return fmt.Sprintf("Game score: %s %d : %s %d\n",
 		game.Teams.Home.Team.Abbreviation, hScore,
 		game.Teams.Away.Team.Abbreviation, aScore), true
 
@@ -73,5 +108,7 @@ func compareState(game helpers.Game) (string, bool) {
 		return "", false
 	}
 
-	return fmt.Sprintf("Game state has changed from %s to %s", gameState[game.GamePK], state), true
+	gameState[game.GamePK] = state
+
+	return fmt.Sprintf("Game state has changed from %s to %s\n", gameState[game.GamePK], state), true
 }
