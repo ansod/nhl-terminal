@@ -30,12 +30,10 @@ func main() {
 	parser := argparse.NewParser(name, desc)
 
 	goals := parser.Flag("g", "goal", &argparse.Options{Help: "Get alerted when a goal has been scored."})
-	start := parser.Flag("s", "start", &argparse.Options{Help: "Get alerted when a game starts."})
-	end := parser.Flag("e", "end", &argparse.Options{Help: "Get alerted when a game has ended."})
+	state := parser.Flag("s", "state", &argparse.Options{Help: "Get alerted when a game starts or ends."})
 
 	flags["goal"] = *goals
-	flags["start"] = *start
-	flags["end"] = *end
+	flags["state"] = *state
 
 	err := parser.Parse(os.Args)
 
@@ -53,6 +51,8 @@ func main() {
 func initGame() {
 	response := helpers.Get()
 
+	printScores(response)
+
 	for _, game := range response.Dates[0].Games {
 		gameScore[game.GamePK] = []int{game.Teams.Home.Score, game.Teams.Away.Score}
 		gameState[game.GamePK] = game.Status.AbstractGameState
@@ -60,42 +60,78 @@ func initGame() {
 }
 
 func update(flags map[string]bool) {
+	for {
+		msg, change := getUpdateMessage(flags)
+
+		if change {
+			fmt.Println("==== UPDATE ====\n", msg)
+		}
+
+		time.Sleep(3 * time.Minute)
+	}
+}
+
+func getUpdateMessage(flags map[string]bool) (string, bool) {
 	var updateMessage bytes.Buffer
 
-	for {
-		fmt.Println("reading...")
-		response := helpers.Get()
+	response := helpers.Get()
 
-		for _, game := range response.Dates[0].Games {
+	for _, game := range response.Dates[0].Games {
+		if flags["goal"] {
 			s, change := compareScore(game)
 			if change {
 				updateMessage.WriteString(s)
 			}
-			s, change = compareState(game)
+		}
+		if flags["state"] {
+			s, change := compareState(game)
 			if change {
 				updateMessage.WriteString(s)
 			}
 		}
-
-		fmt.Println(updateMessage.String())
-
-		updateMessage.Reset()
-
-		time.Sleep(1 * time.Minute)
 	}
+
+	return updateMessage.String(), updateMessage.Len() > 0
+}
+
+func printScores(response helpers.JSON) {
+	var message bytes.Buffer
+
+	for _, game := range response.Dates[0].Games {
+		s := fmt.Sprintf("\n%s %d : %s %d\n",
+			game.Teams.Home.Team.Abbreviation, game.Teams.Home.Score,
+			game.Teams.Away.Team.Abbreviation, game.Teams.Away.Score)
+		message.WriteString(s)
+	}
+
+	fmt.Println(message.String())
 }
 
 func compareScore(game helpers.Game) (string, bool) {
 	hScore := game.Teams.Home.Score
 	aScore := game.Teams.Away.Score
+	hOldScore := gameScore[game.GamePK][0]
+	aOldScore := gameScore[game.GamePK][1]
 
-	if hScore == gameScore[game.GamePK][0] && aScore == gameScore[game.GamePK][1] {
+	if hScore == hOldScore && aScore == aOldScore {
 		return "", false
 	}
 
 	gameScore[game.GamePK] = []int{hScore, aScore}
 
-	return fmt.Sprintf("Game score: %s %d : %s %d\n",
+	if hScore > hOldScore && aScore > aOldScore {
+		return fmt.Sprintf("\n%s [%d] : %s [%d]\n",
+			game.Teams.Home.Team.Abbreviation, hScore,
+			game.Teams.Away.Team.Abbreviation, aScore), true
+	}
+
+	if hScore > hOldScore {
+		return fmt.Sprintf("\n%s [%d] : %s %d\n",
+			game.Teams.Home.Team.Abbreviation, hScore,
+			game.Teams.Away.Team.Abbreviation, aScore), true
+	}
+
+	return fmt.Sprintf("\n%s %d : %s [%d]\n",
 		game.Teams.Home.Team.Abbreviation, hScore,
 		game.Teams.Away.Team.Abbreviation, aScore), true
 
